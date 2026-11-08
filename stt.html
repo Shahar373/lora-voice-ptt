@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1720" />
+    <title>LoRa PTT · Whisper</title>
+  </head>
+  <body>
+    <main id="app">
+      <header class="top">
+        <h1>בדיקת Whisper</h1>
+        <p class="sub"><a href="./">← חזרה</a> · דיבור לטקסט בדפדפן, בלי אינטרנט אחרי ההורדה</p>
+      </header>
+
+      <section class="card" aria-labelledby="env-h">
+        <h2 id="env-h">המכשיר</h2>
+        <dl class="kv" id="env"></dl>
+      </section>
+
+      <section class="card" aria-labelledby="model-h">
+        <h2 id="model-h">מודל</h2>
+        <div class="settings flat">
+          <label class="field grow">
+            <span>מודל</span>
+            <select id="model"></select>
+          </label>
+          <label class="field">
+            <span>דיוק משקלים</span>
+            <select id="precision">
+              <option value="auto">אוטומטי (מומלץ)</option>
+              <option value="fp16">fp16 · מקסימום איכות (WebGPU)</option>
+              <option value="q4">q4 · קטן יותר</option>
+              <option value="q8">q8 · מתאים ל־WASM</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>מנוע</span>
+            <select id="device">
+              <option value="auto">אוטומטי</option>
+              <option value="webgpu">WebGPU</option>
+              <option value="wasm">WASM (מעבד)</option>
+            </select>
+          </label>
+        </div>
+        <p class="meta" id="model-info"></p>
+        <div class="row">
+          <button type="button" class="play primary" id="load">הורד וטען</button>
+          <button type="button" class="play" id="delete">מחק מהמכשיר</button>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-bar"><div id="progress-fill"></div></div>
+          <p class="meta" id="progress-text"></p>
+        </div>
+        <dl class="kv" id="metrics" hidden></dl>
+      </section>
+
+      <section class="ptt-wrap">
+        <div id="ptt-root" class="ptt-root"></div>
+        <p class="status" id="status" role="status">טען מודל כדי להתחיל.</p>
+        <p class="hint desktop-only">במחשב: אפשר להחזיק את מקש הרווח · Esc לביטול</p>
+      </section>
+
+      <section id="results" class="results"></section>
+
+      <section class="card" aria-labelledby="tts-h">
+        <h2 id="tts-h">הקראה (TTS)</h2>
+        <p class="meta" id="tts-info">בודק קולות…</p>
+        <button type="button" class="play" id="tts-test">🔊 בדיקת הקראה</button>
+      </section>
+    </main>
+    <script type="module" src="/src/stt-page.ts"></script>
+  </body>
+</html>

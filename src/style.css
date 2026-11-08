@@ -75,7 +75,7 @@ select {
 .ring-fg { stroke: var(--rec); stroke-linecap: round; }
 
 .level { width: min(72vw, 300px); height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
-#level-bar { height: 100%; width: 0; background: var(--accent); transition: width 60ms linear; }
+.level-bar { height: 100%; width: 0; background: var(--accent); transition: width 60ms linear; }
 .status { margin: 0; min-height: 1.4em; text-align: center; }
 .status.error { color: var(--rec); }
 .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
@@ -98,3 +98,27 @@ select {
 .play:active { background: #2b4058; }
 .play.primary { background: #1d4d35; border-color: #2c6e4c; }
 .ltr { direction: ltr; unicode-bidi: isolate; }
+
+a { color: #7cc4ff; }
+.card h2 { margin: 0 0 8px; font-size: 1rem; }
+.settings.flat { background: none; border: 0; padding: 0; }
+.field.grow { flex: 1 1 220px; }
+.field.grow select { width: 100%; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row .play { flex: 1 1 140px; }
+.play:disabled { opacity: 0.5; cursor: default; }
+.kv { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.88rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kv .good { color: var(--accent); }
+.kv .bad { color: var(--rec); }
+.progress { margin-top: 10px; }
+.progress-bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+#progress-fill { height: 100%; width: 0; background: var(--accent); transition: width 120ms linear; }
+.ptt-root { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ptt[aria-disabled='true'] { cursor: not-allowed; }
+.transcript { font-size: 1.25rem; line-height: 1.5; margin: 0 0 10px; white-space: pre-wrap; }
+.transcript.empty { color: var(--muted); font-size: 1rem; }
+.home-links { display: flex; flex-direction: column; gap: 12px; }
+.home-link { display: block; color: inherit; text-decoration: none; }
+.home-link:hover { border-color: var(--accent); }

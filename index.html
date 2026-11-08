@@ -10,37 +10,19 @@
     <main id="app">
       <header class="top">
         <h1>LoRa PTT</h1>
-        <p class="sub">שלב 1 · בדיקת קודק בלולאה מקומית (בלי רדיו)</p>
+        <p class="sub">הודעות דיבור מעל רשת Meshtastic פרטית</p>
       </header>
-
-      <section class="settings" aria-label="הגדרות">
-        <label class="field">
-          <span>מצב קודק לניגון אוטומטי</span>
-          <select id="mode">
-            <option value="450">Codec2 450</option>
-            <option value="700C">Codec2 700C</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="autoplay" /> ניגון אוטומטי</label>
-        <label class="check"><input type="checkbox" id="normalize" /> נרמול עוצמה</label>
-      </section>
-
-      <section class="ptt-wrap">
-        <button id="ptt" class="ptt" type="button" aria-label="החזק כדי להקליט">
-          <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
-            <circle class="ring-bg" cx="50" cy="50" r="46" />
-            <circle class="ring-fg" id="ring" cx="50" cy="50" r="46" />
-          </svg>
-          <span class="ptt-label" id="ptt-label">החזק לדיבור</span>
-          <span class="ptt-time" id="ptt-time"></span>
-        </button>
-        <div class="level" aria-hidden="true"><div id="level-bar"></div></div>
-        <p class="status" id="status" role="status">לחיצה ראשונה תבקש הרשאה למיקרופון.</p>
-        <p class="hint desktop-only">במחשב: אפשר להחזיק את מקש הרווח · Esc לביטול</p>
-      </section>
-
-      <section id="results" class="results" hidden></section>
+      <nav class="home-links">
+        <a class="card home-link" href="stt.html">
+          <h2>דיבור לטקסט · בדיקת Whisper</h2>
+          <p class="meta">מצב ראשי. הורדת מודל, הקלטה, תמלול ומדידת זמנים.</p>
+        </a>
+        <a class="card home-link" href="codec.html">
+          <h2>קול Codec2 · בדיקה בלולאה</h2>
+          <p class="meta">מצב משני. הקלטה, קידוד 450 / 700C ופענוח, בלי רדיו.</p>
+        </a>
+      </nav>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/home.ts"></script>
   </body>
 </html>
