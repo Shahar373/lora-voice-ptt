@@ -2,6 +2,8 @@
 
 Voice-message "walkie-talkie" over a private Meshtastic LoRa mesh. Android phones and a Windows laptop are the audio endpoints, and LilyGO T-Echo nodes are the modems, connected over Bluetooth (phones) or USB serial (laptop).
 
+**Language:** talk to the user in **Hebrew** (all chat replies, milestone reports, questions). Code, comments, commit messages and this spec stay in English; UI strings are Hebrew (§6).
+
 This document captures decisions already made with the user. Do not re-litigate them; where something below is marked **VERIFY**, check it against current upstream docs/code before relying on it.
 
 ---
