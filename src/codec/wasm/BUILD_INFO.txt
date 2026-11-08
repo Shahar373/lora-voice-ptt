@@ -1,0 +1,2 @@
+codec2 9f5e2deebcdf702ae9fd71785879891bc38d2f4e
+emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 7.0.0 (777e6e5db7b4990bcaeb1b9998ed642cc84e6629)
