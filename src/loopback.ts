@@ -1,32 +1,44 @@
 /**
- * Milestone 1: codec loopback, no radio.
+ * Codec2 voice mode (secondary), loopback test without a radio.
  * record -> resample -> Codec2 encode -> bit-pack -> wire chunks
  *        -> parse chunks -> unpack -> decode -> play
  */
-import { meshPacketAirtimeMs, MAX_LORA_PAYLOAD_LEN, meshPacketOnAirBytes } from './airtime';
+import {
+  MAX_LORA_PAYLOAD_LEN,
+  PORTNUM_PRIVATE_APP,
+  meshPacketAirtimeMs,
+  meshPacketOnAirBytes,
+  presetParams,
+  type ModemPresetName,
+} from './airtime';
 import { unlockAudio } from './audio/engine';
-import { playPcm, stopPlayback } from './audio/player';
-import { Recorder } from './audio/recorder';
+import { playPcm } from './audio/player';
+import type { Recording } from './audio/recorder';
 import { CODEC_MODES, CODEC_SAMPLE_RATE, type CodecModeName } from './codec/codec2';
 import { loadCodec2Browser } from './codec/load-browser';
 import { decodeVoice, encodeVoice, prepareVoice, type EncodedMessage } from './pipeline';
 import { decodeChunk, randomMsgId } from './protocol/wire';
 import { loadSettings, saveSettings } from './settings';
-import { attachPtt } from './ui/ptt';
+import { fillPresetSelect } from './ui/preset-select';
+import { PttRecorder, pttMarkup } from './ui/ptt-recorder';
 
 const MAX_SECONDS = 8;
-const MIN_SECONDS = 0.4;
 /** EU_868 10 % duty cycle: 360 s of TX per rolling hour. */
 const HOURLY_BUDGET_MS = 360_000;
-
-type State = 'idle' | 'arming' | 'recording' | 'processing';
 
 interface ModeResult {
   enc: EncodedMessage;
   pcm: Int16Array;
-  airtimeMs: number;
   encodeMs: number;
   decodeMs: number;
+}
+
+interface Result {
+  n: number;
+  seconds: number;
+  inRate: number;
+  original: Int16Array;
+  byMode: Record<CodecModeName, ModeResult>;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -38,132 +50,43 @@ function fmt(n: number, digits = 1) {
 export function mountLoopback() {
   const settings = loadSettings();
   const modeSel = $<HTMLSelectElement>('mode');
+  const presetSel = $<HTMLSelectElement>('preset');
   const autoplay = $<HTMLInputElement>('autoplay');
   const normalize = $<HTMLInputElement>('normalize');
-  const ptt = $<HTMLButtonElement>('ptt');
-  const label = $('ptt-label');
-  const time = $('ptt-time');
-  const ring = document.getElementById('ring') as unknown as SVGCircleElement;
-  const levelBar = $('level-bar');
   const status = $('status');
-  const results = $('results');
+  const resultsEl = $('results');
+  const pttRoot = $('ptt-root');
+  pttRoot.innerHTML = pttMarkup();
 
   modeSel.value = settings.mode;
+  fillPresetSelect(presetSel, settings.preset);
   autoplay.checked = settings.autoplay;
   normalize.checked = settings.normalize;
+
+  const results: Result[] = [];
   const persist = () => {
     settings.mode = modeSel.value as CodecModeName;
+    settings.preset = presetSel.value as ModemPresetName;
     settings.autoplay = autoplay.checked;
     settings.normalize = normalize.checked;
     saveSettings(settings);
-    results.querySelectorAll<HTMLElement>('.mode').forEach((el) =>
-      el.classList.toggle('selected', el.dataset.mode === settings.mode),
-    );
+    renderAll();
   };
-  modeSel.addEventListener('change', persist);
-  autoplay.addEventListener('change', persist);
-  normalize.addEventListener('change', persist);
-
-  const codecReady = loadCodec2Browser();
-  codecReady.catch((e) => setStatus(`שגיאה בטעינת הקודק: ${e}`, true));
-
-  const recorder = new Recorder();
-  let levelDecay = 0;
-  recorder.onLevel = (peak) => {
-    levelDecay = Math.max(peak, levelDecay * 0.7);
-    levelBar.style.width = `${Math.min(100, levelDecay * 140)}%`;
-  };
-
-  const C = 2 * Math.PI * 46;
-  ring.style.strokeDasharray = `${C}`;
-  ring.style.strokeDashoffset = `${C}`;
-
-  let state: State = 'idle';
-  let held = false;
-  let startedAt = 0;
-  let raf = 0;
-  let autoStop = 0;
-  let counter = 0;
+  for (const el of [modeSel, presetSel, autoplay, normalize]) el.addEventListener('change', persist);
 
   function setStatus(text: string, error = false) {
     status.textContent = text;
     status.classList.toggle('error', error);
   }
 
-  function setUi(s: State) {
-    state = s;
-    ptt.classList.toggle('recording', s === 'recording');
-    ptt.classList.toggle('busy', s === 'arming' || s === 'processing');
-    if (s !== 'recording') ptt.classList.remove('cancel-armed');
-    label.textContent =
-      s === 'recording' ? 'מקליט… שחרר לסיום' : s === 'processing' ? 'מעבד…' : s === 'arming' ? 'רגע…' : 'החזק לדיבור';
-    if (s !== 'recording') {
-      cancelAnimationFrame(raf);
-      ring.style.strokeDashoffset = `${C}`;
-      time.textContent = '';
-      levelBar.style.width = '0';
-    }
-  }
+  const codecReady = loadCodec2Browser();
+  codecReady.catch((e) => setStatus(`שגיאה בטעינת הקודק: ${e}`, true));
 
-  function tick() {
-    const elapsed = (performance.now() - startedAt) / 1000;
-    const p = Math.min(1, elapsed / MAX_SECONDS);
-    ring.style.strokeDashoffset = `${C * p}`;
-    time.textContent = `${fmt(Math.max(0, MAX_SECONDS - elapsed))} ש׳`;
-    raf = requestAnimationFrame(tick);
-  }
-
-  function micError(e: unknown) {
-    const name = (e as { name?: string })?.name;
-    if (!window.isSecureContext) setStatus('המיקרופון דורש HTTPS (או localhost).', true);
-    else if (name === 'NotAllowedError') setStatus('אין הרשאה למיקרופון. אפשר אותה בהגדרות האתר ונסה שוב.', true);
-    else if (name === 'NotFoundError') setStatus('לא נמצא מיקרופון.', true);
-    else setStatus(`שגיאת מיקרופון: ${e}`, true);
-  }
-
-  async function begin() {
-    held = true;
-    unlockAudio();
-    stopPlayback();
-    if (state !== 'idle') return;
-    if (!recorder.isReady) {
-      setUi('arming');
-      setStatus('מבקש גישה למיקרופון…');
-      try {
-        await recorder.ensureMic();
-      } catch (e) {
-        setUi('idle');
-        micError(e);
-        return;
-      }
-      if (!held) {
-        // Released during the permission prompt.
-        setUi('idle');
-        setStatus('המיקרופון מוכן. החזק שוב כדי להקליט.');
-        return;
-      }
-    }
-    recorder.start(MAX_SECONDS);
-    startedAt = performance.now();
-    setUi('recording');
-    setStatus('');
-    raf = requestAnimationFrame(tick);
-    autoStop = window.setTimeout(() => void finish(), MAX_SECONDS * 1000);
-  }
-
-  async function finish() {
-    held = false;
-    clearTimeout(autoStop);
-    if (state !== 'recording') return;
-    setUi('processing');
-    try {
-      const rec = await recorder.stop();
-      const seconds = rec.samples.length / rec.sampleRate;
-      if (seconds < MIN_SECONDS) {
-        setUi('idle');
-        setStatus('קצר מדי. החזק לפחות חצי שנייה.');
-        return;
-      }
+  new PttRecorder({
+    root: pttRoot,
+    maxSeconds: MAX_SECONDS,
+    setStatus,
+    onRecording: async (rec: Recording) => {
       setStatus('מקודד…');
       const m = await codecReady;
       const pcm8k = prepareVoice(rec.samples, rec.sampleRate, normalize.checked);
@@ -174,86 +97,62 @@ export function mountLoopback() {
         const enc = encodeVoice(m, pcm8k, mode, msgId);
         const t1 = performance.now();
         // Go through the exact bytes that would be on the radio.
-        const parsed = enc.chunks.map((b) => decodeChunk(b));
-        const pcm = decodeVoice(m, parsed);
-        const t2 = performance.now();
-        const airtimeMs = enc.chunks.reduce((a, b) => a + meshPacketAirtimeMs(b.length), 0);
-        byMode[mode.name] = { enc, pcm, airtimeMs, encodeMs: t1 - t0, decodeMs: t2 - t1 };
+        const pcm = decodeVoice(m, enc.chunks.map((b) => decodeChunk(b)));
+        byMode[mode.name] = { enc, pcm, encodeMs: t1 - t0, decodeMs: performance.now() - t1 };
       }
-      counter++;
-      renderResult(counter, seconds, rec.sampleRate, pcm8k, byMode);
-      setUi('idle');
+      results.unshift({
+        n: results.length + 1,
+        seconds: rec.samples.length / rec.sampleRate,
+        inRate: rec.sampleRate,
+        original: pcm8k,
+        byMode,
+      });
+      results.splice(5);
+      renderAll();
       setStatus('מוכן. אפשר להשוות בין המצבים למטה.');
       if (autoplay.checked) void playPcm(byMode[settings.mode].pcm, CODEC_SAMPLE_RATE);
-    } catch (e) {
-      setUi('idle');
-      setStatus(`שגיאה: ${e}`, true);
-    }
-  }
-
-  function cancel() {
-    held = false;
-    clearTimeout(autoStop);
-    if (state === 'recording') {
-      recorder.cancel();
-      setUi('idle');
-      setStatus('ההקלטה בוטלה.');
-    }
-  }
-
-  attachPtt(ptt, {
-    onStart: () => void begin(),
-    onEnd: () => void finish(),
-    onCancel: cancel,
-    onCancelArmed: (armed) => {
-      if (state !== 'recording') return;
-      ptt.classList.toggle('cancel-armed', armed);
-      label.textContent = armed ? 'שחרר כדי לבטל' : 'מקליט… שחרר לסיום';
     },
   });
 
-  function renderResult(
-    n: number,
-    seconds: number,
-    inRate: number,
-    original: Int16Array,
-    byMode: Record<CodecModeName, ModeResult>,
-  ) {
+  function renderAll() {
+    resultsEl.replaceChildren(...results.map(renderResult));
+    resultsEl.hidden = results.length === 0;
+  }
+
+  function renderResult(r: Result): HTMLElement {
     const card = document.createElement('article');
     card.className = 'card';
     const h = document.createElement('h2');
-    h.textContent = `הקלטה ${n} · ${fmt(seconds)} ש׳`;
+    h.textContent = `הקלטה ${r.n} · ${fmt(r.seconds)} ש׳`;
     const meta = document.createElement('p');
     meta.className = 'meta';
-    meta.innerHTML = `דגימה: <span class="ltr">${inRate} Hz → 8000 Hz</span>`;
-    const orig = playButton('▶ מקור, בלי קודק (<span class="ltr">8 kHz</span>)', original);
+    meta.innerHTML = `דגימה: <span class="ltr">${r.inRate} Hz → 8000 Hz</span>`;
+    const orig = playButton('▶ מקור, בלי קודק (<span class="ltr">8 kHz</span>)', r.original);
     const modes = document.createElement('div');
     modes.className = 'modes';
-    for (const r of Object.values(byMode)) modes.append(modeBox(r));
+    for (const m of Object.values(r.byMode)) modes.append(modeBox(m));
     card.append(h, meta, orig, modes);
-    // Newest first; keep a handful for comparison.
-    results.prepend(card);
-    while (results.children.length > 5) results.lastElementChild?.remove();
-    results.hidden = false;
+    return card;
   }
 
   function modeBox(r: ModeResult): HTMLElement {
+    const preset = presetParams(settings.preset);
+    const airtimeMs = r.enc.chunks.reduce((a, b) => a + meshPacketAirtimeMs(b.length, preset, PORTNUM_PRIVATE_APP), 0);
     const box = document.createElement('div');
     box.className = 'mode';
-    box.dataset.mode = r.enc.mode.name;
     box.classList.toggle('selected', r.enc.mode.name === settings.mode);
     const title = document.createElement('strong');
     title.innerHTML = `<span class="ltr">Codec2 ${r.enc.mode.name}</span>`;
     const voiceBytes = r.enc.chunks.reduce((a, b) => a + b.length, 0);
     const sizes = r.enc.chunks.map((b) => b.length).join(' + ');
-    const onAir = r.enc.chunks.map((b) => meshPacketOnAirBytes(b.length));
+    const onAir = r.enc.chunks.map((b) => meshPacketOnAirBytes(b.length, PORTNUM_PRIVATE_APP));
     const dl = document.createElement('dl');
     const rows: [string, string][] = [
       ['פריימים', `<span class="ltr">${r.enc.nFrames} × ${r.enc.bitsPerFrame} bit</span>`],
       ['מטען', `<span class="ltr">${voiceBytes} B (${sizes})</span>`],
       ['חבילות', `${r.enc.chunks.length} · <span class="ltr">${onAir.join(' + ')} / ${MAX_LORA_PAYLOAD_LEN} B</span> באוויר`],
-      ['זמן שידור', `${fmt(r.airtimeMs / 1000)} ש׳ (ישיר, 0 קפיצות)`],
-      ['בתקציב שעתי', `כ־${Math.floor(HOURLY_BUDGET_MS / r.airtimeMs)} הודעות כאלה`],
+      ['זמן שידור', `${fmt(airtimeMs / 1000)} ש׳ (<span class="ltr">${settings.preset}</span>, ישיר)`],
+      ['בתקציב שעתי', `כ־${Math.floor(HOURLY_BUDGET_MS / airtimeMs)} הודעות כאלה`],
       ['קידוד / פענוח', `<span class="ltr">${fmt(r.encodeMs, 0)} / ${fmt(r.decodeMs, 0)} ms</span>`],
     ];
     for (const [k, v] of rows) {
@@ -281,6 +180,4 @@ export function mountLoopback() {
     });
     return b;
   }
-
-  if (!window.isSecureContext) setStatus('המיקרופון דורש HTTPS (או localhost).', true);
 }

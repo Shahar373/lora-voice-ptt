@@ -23,20 +23,51 @@ export interface LoraParams {
   ldro: boolean;
 }
 
-/**
- * Meshtastic LONG_MODERATE: SF11 / BW125 / CR4/8.
- * Preamble 16 verified in firmware v2.7.26 (RadioInterface.h `preambleLength = 16`).
- * LDRO is on because Tsym (16.384 ms) > 16 ms.
- */
-export const LONG_MODERATE: LoraParams = {
-  sf: 11,
-  bw: 125_000,
-  crDenom: 8,
-  preamble: 16,
-  explicitHeader: true,
-  crc: true,
-  ldro: true,
+/** Meshtastic modem presets (firmware v2.7.26, MeshRadio.h modemPresetToParams). */
+export type ModemPresetName =
+  | 'SHORT_TURBO'
+  | 'SHORT_FAST'
+  | 'SHORT_SLOW'
+  | 'MEDIUM_FAST'
+  | 'MEDIUM_SLOW'
+  | 'LONG_TURBO'
+  | 'LONG_FAST'
+  | 'LONG_MODERATE'
+  | 'LONG_SLOW';
+
+const PRESET_TABLE: Record<ModemPresetName, { sf: number; bwKHz: number; crDenom: number }> = {
+  SHORT_TURBO: { sf: 7, bwKHz: 500, crDenom: 5 },
+  SHORT_FAST: { sf: 7, bwKHz: 250, crDenom: 5 },
+  SHORT_SLOW: { sf: 8, bwKHz: 250, crDenom: 5 },
+  MEDIUM_FAST: { sf: 9, bwKHz: 250, crDenom: 5 },
+  MEDIUM_SLOW: { sf: 10, bwKHz: 250, crDenom: 5 },
+  LONG_TURBO: { sf: 11, bwKHz: 500, crDenom: 8 },
+  LONG_FAST: { sf: 11, bwKHz: 250, crDenom: 5 },
+  LONG_MODERATE: { sf: 11, bwKHz: 125, crDenom: 8 },
+  LONG_SLOW: { sf: 12, bwKHz: 125, crDenom: 8 },
 };
+
+export const MODEM_PRESET_NAMES = Object.keys(PRESET_TABLE) as ModemPresetName[];
+
+/** Meshtastic preamble length (RadioInterface.h `preambleLength = 16`, verified in v2.7.26). */
+export const MESHTASTIC_PREAMBLE = 16;
+
+/**
+ * LoRa parameters for a Meshtastic preset. LDRO follows the firmware's auto rule
+ * (RadioLibInterface.h: enabled when symbol time >= 16 ms).
+ */
+export function presetParams(name: ModemPresetName): LoraParams {
+  const t = PRESET_TABLE[name];
+  return {
+    sf: t.sf,
+    bw: t.bwKHz * 1000,
+    crDenom: t.crDenom,
+    preamble: MESHTASTIC_PREAMBLE,
+    explicitHeader: true,
+    crc: true,
+    ldro: 2 ** t.sf / t.bwKHz >= 16,
+  };
+}
 
 export function symbolTimeMs(p: LoraParams): number {
   return (2 ** p.sf / p.bw) * 1000;
@@ -54,7 +85,7 @@ export function payloadSymbols(payloadBytes: number, p: LoraParams): number {
 }
 
 /** Total time on air in milliseconds for a LoRa frame of `payloadBytes` PHY payload bytes. */
-export function timeOnAirMs(payloadBytes: number, p: LoraParams = LONG_MODERATE): number {
+export function timeOnAirMs(payloadBytes: number, p: LoraParams): number {
   const tsym = symbolTimeMs(p);
   const preamble = (p.preamble + 4.25) * tsym;
   return preamble + payloadSymbols(payloadBytes, p) * tsym;
@@ -63,6 +94,9 @@ export function timeOnAirMs(payloadBytes: number, p: LoraParams = LONG_MODERATE)
 // ---------------------------------------------------------------------------
 // Meshtastic framing (firmware 2.7.x)
 // ---------------------------------------------------------------------------
+
+export const PORTNUM_TEXT_MESSAGE = 1;
+export const PORTNUM_PRIVATE_APP = 256;
 
 /** Max LoRa PHY payload (RadioInterface.h MAX_LORA_PAYLOAD_LEN). */
 export const MAX_LORA_PAYLOAD_LEN = 255;
@@ -87,31 +121,28 @@ function varintLen(v: number): number {
  * (Router.cpp perhapsEncode), so those 2 bytes are always on air.
  * AES-CTR channel encryption does not change the length.
  */
-export function meshDataProtobufLen(appPayloadLen: number, portnum = 256): number {
+export function meshDataProtobufLen(appPayloadLen: number, portnum: number): number {
   return 1 + varintLen(portnum) + 1 + varintLen(appPayloadLen) + appPayloadLen + 2;
 }
 
 /** Bytes on air for one Meshtastic packet carrying `appPayloadLen` application bytes. */
-export function meshPacketOnAirBytes(appPayloadLen: number, portnum = 256): number {
+export function meshPacketOnAirBytes(appPayloadLen: number, portnum: number): number {
   return MESHTASTIC_HEADER_LEN + meshDataProtobufLen(appPayloadLen, portnum);
 }
 
 /**
  * Largest application payload the firmware will accept on a channel packet.
  * perhapsEncode() rejects `encodedData + 16 > 255` with TOO_LARGE, so although
- * Constants.DATA_PAYLOAD_LEN is 233, the real limit for portnum 256 is 231.
+ * Constants.DATA_PAYLOAD_LEN is 233, the real limit is 231 for portnum 256
+ * (voice) and 232 for portnum 1 (TEXT_MESSAGE_APP).
  */
-export function maxAppPayload(portnum = 256): number {
+export function maxAppPayload(portnum: number): number {
   let n = MAX_LORA_PAYLOAD_LEN;
   while (n > 0 && meshPacketOnAirBytes(n, portnum) > MAX_LORA_PAYLOAD_LEN) n--;
   return n;
 }
 
 /** Airtime (ms) of one Meshtastic packet with `appPayloadLen` application bytes. */
-export function meshPacketAirtimeMs(
-  appPayloadLen: number,
-  p: LoraParams = LONG_MODERATE,
-  portnum = 256,
-): number {
+export function meshPacketAirtimeMs(appPayloadLen: number, p: LoraParams, portnum: number): number {
   return timeOnAirMs(meshPacketOnAirBytes(appPayloadLen, portnum), p);
 }

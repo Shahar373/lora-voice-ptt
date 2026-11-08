@@ -11,7 +11,7 @@
  *
  * Frames never span chunks, so each chunk decodes on its own.
  */
-import { maxAppPayload } from '../airtime';
+import { maxAppPayload, PORTNUM_PRIVATE_APP } from '../airtime';
 import { packFrames, packedByteLength, unpackFrames } from './bitpack';
 
 export const PROTOCOL_VERSION = 1;
@@ -19,7 +19,7 @@ export const HEADER_LEN = 5;
 export const MAX_CHUNKS = 15;
 export const MAX_FRAMES_PER_CHUNK = 255;
 /** Meshtastic portnum for PRIVATE_APP. */
-export const PORTNUM = 256;
+export const PORTNUM = PORTNUM_PRIVATE_APP;
 /** Largest payload the firmware accepts for our portnum (231 on 2.7.x). */
 export const MAX_PAYLOAD = maxAppPayload(PORTNUM);
 

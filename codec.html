@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1720" />
+    <title>LoRa PTT · Codec2</title>
+  </head>
+  <body>
+    <main id="app">
+      <header class="top">
+        <h1>LoRa PTT</h1>
+        <p class="sub"><a href="./">← חזרה</a> · מצב משני: קול Codec2 · בדיקה בלולאה מקומית (בלי רדיו)</p>
+      </header>
+
+      <section class="settings" aria-label="הגדרות">
+        <label class="field">
+          <span>מצב קודק לניגון אוטומטי</span>
+          <select id="mode">
+            <option value="450">Codec2 450</option>
+            <option value="700C">Codec2 700C</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Preset לחישוב זמן אוויר</span>
+          <select id="preset" class="ltr"></select>
+        </label>
+        <label class="check"><input type="checkbox" id="autoplay" /> ניגון אוטומטי</label>
+        <label class="check"><input type="checkbox" id="normalize" /> נרמול עוצמה</label>
+      </section>
+
+      <section class="ptt-wrap">
+        <div id="ptt-root" class="ptt-root"></div>
+        <p class="status" id="status" role="status">לחיצה ראשונה תבקש הרשאה למיקרופון.</p>
+        <p class="hint desktop-only">במחשב: אפשר להחזיק את מקש הרווח · Esc לביטול</p>
+      </section>
+
+      <section id="results" class="results" hidden></section>
+    </main>
+    <script type="module" src="/src/codec-page.ts"></script>
+  </body>
+</html>
