@@ -1,0 +1,4 @@
+node_modules/
+dist/
+codec2-wasm/.build/
+*.local
